@@ -75,6 +75,17 @@ async function renderLive() {
   }
 }
 
+async function renderInsights() {
+  const insight = await send({ type: "GET_TAB_INSIGHTS" });
+  const container = document.getElementById("insights");
+  if (!insight?.ok) return;
+  container.innerHTML = `
+    <div><strong>${insight.total}</strong><span> open</span></div>
+    <div><strong>${insight.categorized}</strong><span> recognized</span></div>
+    <div><strong>${insight.duplicates}</strong><span> duplicates · ${insight.stale} stale</span></div>
+  `;
+}
+
 function renderGroupBlock(label, color, tabs) {
   const block = document.createElement("div");
   block.className = "group-block";
@@ -107,7 +118,55 @@ function renderGroupBlock(label, color, tabs) {
 document.getElementById("sortNowBtn").addEventListener("click", async () => {
   await send({ type: "SORT_CURRENT_WINDOW" });
   renderLive();
+  renderInsights();
 });
+
+document.getElementById("tidyNowBtn").addEventListener("click", async (event) => {
+  const result = await send({ type: "TIDY_CURRENT_WINDOW" });
+  event.currentTarget.textContent = result.archived ? `✓ ${result.archived} duplicate${result.archived === 1 ? "" : "s"} closed` : "✓ Tidy";
+  setTimeout(() => (event.currentTarget.textContent = "✦ Tidy"), 1800);
+  renderLive();
+  renderInsights();
+});
+
+document.getElementById("focusBtn").addEventListener("click", async (event) => {
+  const result = await send({ type: "START_FOCUS_MODE" });
+  event.currentTarget.textContent = result.moved ? `✓${result.moved}` : "◐";
+  setTimeout(() => (event.currentTarget.textContent = "◐"), 1800);
+  renderLive();
+});
+
+let searchTimer;
+document.getElementById("tabSearchInput").addEventListener("input", (event) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => renderSearchResults(event.target.value), 150);
+});
+
+async function renderSearchResults(query) {
+  const container = document.getElementById("searchResults");
+  if (!query.trim()) { container.innerHTML = ""; return; }
+  const response = await send({ type: "SEARCH_TABS", query });
+  container.innerHTML = "";
+  for (const result of response.results || []) {
+    const item = document.createElement("button");
+    item.className = "search-result";
+    item.innerHTML = `<span>${escapeHtml(result.title)}</span><small>${result.kind}</small>`;
+    item.addEventListener("click", async () => {
+      if (result.kind === "tab") {
+        await chrome.tabs.update(result.id, { active: true });
+        await chrome.windows.update(result.windowId, { focused: true });
+      } else if (result.kind === "archive") {
+        await chrome.tabs.create({ url: result.url });
+      } else {
+        await send({ type: "RESTORE_SESSION", session: result.session });
+      }
+      container.innerHTML = "";
+      document.getElementById("tabSearchInput").value = "";
+    });
+    container.appendChild(item);
+  }
+  if (!container.children.length) container.innerHTML = `<div class="empty-state compact-empty">No matching tabs, sessions, or archive entries.</div>`;
+}
 
 // ---------- Sessions panel ----------
 async function renderSessions() {
@@ -196,15 +255,27 @@ async function renderSettings() {
   document.getElementById("autoSortEnabled").checked = settings.autoSortEnabled ?? true;
   document.getElementById("autoRestoreOnStartup").checked = settings.autoRestoreOnStartup ?? false;
   document.getElementById("autoSaveIntervalMinutes").value = String(settings.autoSaveIntervalMinutes ?? 10);
+  for (const id of ["smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
+    document.getElementById(id).checked = settings[id] ?? (id !== "autoArchiveDuplicates");
+  }
+  document.getElementById("minimumSmartGroupSize").value = String(settings.minimumSmartGroupSize ?? 2);
+  document.getElementById("staleTabDays").value = String(settings.staleTabDays ?? 14);
 }
 
-for (const id of ["autoSortEnabled", "autoRestoreOnStartup"]) {
+for (const id of ["autoSortEnabled", "autoRestoreOnStartup", "smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
   document.getElementById(id).addEventListener("change", (e) => {
     send({ type: "UPDATE_SETTINGS", settings: { [id]: e.target.checked } });
   });
 }
 document.getElementById("autoSaveIntervalMinutes").addEventListener("change", (e) => {
   send({ type: "UPDATE_SETTINGS", settings: { autoSaveIntervalMinutes: Number(e.target.value) } });
+});
+document.getElementById("minimumSmartGroupSize").addEventListener("change", (e) => {
+  send({ type: "UPDATE_SETTINGS", settings: { minimumSmartGroupSize: Number(e.target.value) } });
+});
+document.getElementById("staleTabDays").addEventListener("change", (e) => {
+  send({ type: "UPDATE_SETTINGS", settings: { staleTabDays: Number(e.target.value) } });
+  renderInsights();
 });
 
 function escapeHtml(str) {
@@ -214,4 +285,5 @@ function escapeHtml(str) {
 }
 
 renderLive();
+renderInsights();
 renderSettings();
