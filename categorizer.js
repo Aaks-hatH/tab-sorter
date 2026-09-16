@@ -46,6 +46,14 @@ export const BUILTIN_RULES = [
   { category: "Research & Reference", color: "cyan", domains: [
       "wikipedia.org", "scholar.google.com", "arxiv.org",
       "researchgate.net", "jstor.org"
+  ]},
+  { category: "Finance", color: "green", domains: [
+      "stripe.com", "paypal.com", "wise.com", "mint.intuit.com",
+      "coinbase.com", "robinhood.com", "fidelity.com", "chase.com"
+  ]},
+  { category: "Work", color: "blue", domains: [
+      "slack.com", "zoom.us", "meet.google.com", "linear.app",
+      "atlassian.net", "jira.com", "confluence.com", "salesforce.com"
   ]}
 ];
 
@@ -71,6 +79,15 @@ function hostnameOf(url) {
   } catch {
     return "";
   }
+}
+
+export function domainLabel(url) {
+  const hostname = hostnameOf(url);
+  if (!hostname) return "";
+  const parts = hostname.split(".");
+  // This intentionally avoids a full public-suffix dependency while producing
+  // useful labels for common domains and subdomains.
+  return parts.length > 2 ? parts.slice(-2, -1)[0] : parts[0];
 }
 
 function domainMatch(hostname, rule) {
@@ -107,6 +124,32 @@ export function assignCategory(tab, customRules = []) {
   }
 
   return null; // caller decides how to bucket uncategorized tabs
+}
+
+/**
+ * Provides an explainable categorization signal for the UI and automation.
+ * Built-in and user rules are high confidence; title matches are softer.
+ */
+export function classifyTab(tab, customRules = []) {
+  const hostname = hostnameOf(tab.url || "");
+  if (!hostname) return null;
+  for (const rule of customRules) {
+    if (domainMatch(hostname, rule)) {
+      return { name: rule.category, color: rule.color || "grey", confidence: "high", reason: "custom rule" };
+    }
+  }
+  for (const rule of BUILTIN_RULES) {
+    if (domainMatch(hostname, rule)) {
+      return { name: rule.category, color: rule.color, confidence: "high", reason: "known site" };
+    }
+  }
+  const title = (tab.title || "").toLowerCase();
+  for (const rule of KEYWORD_RULES) {
+    if (rule.words.some(word => title.includes(word))) {
+      return { name: rule.category, color: rule.color, confidence: "medium", reason: "page topic" };
+    }
+  }
+  return null;
 }
 
 /**
