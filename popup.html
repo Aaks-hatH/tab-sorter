@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Smart Tab Sorter</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="app-header">
+    <span class="app-title">Smart Tab Sorter</span>
+    <button id="sortNowBtn" class="icon-btn" title="Sort current window now">⟲ Sort</button>
+  </header>
+
+  <nav class="tabbar">
+    <button class="tabbtn active" data-tab="live">Live</button>
+    <button class="tabbtn" data-tab="sessions">Sessions</button>
+    <button class="tabbtn" data-tab="archive">Closed</button>
+    <button class="tabbtn" data-tab="settings">Settings</button>
+  </nav>
+
+  <main>
+    <section id="panel-live" class="panel active">
+      <div id="liveGroups"></div>
+    </section>
+
+    <section id="panel-sessions" class="panel">
+      <div class="row">
+        <input id="sessionNameInput" type="text" placeholder="Session name (optional)" />
+        <button id="saveSessionBtn" class="primary-btn">Save current</button>
+      </div>
+      <div id="sessionsList"></div>
+    </section>
+
+    <section id="panel-archive" class="panel">
+      <div class="row">
+        <span class="muted">Recently closed, auto-organized</span>
+        <button id="clearArchiveBtn" class="link-btn">Clear</button>
+      </div>
+      <div id="archiveList"></div>
+    </section>
+
+    <section id="panel-settings" class="panel">
+      <label class="setting-row">
+        <span>Auto-sort tabs live</span>
+        <input type="checkbox" id="autoSortEnabled" />
+      </label>
+      <label class="setting-row">
+        <span>Auto-restore last session on browser startup</span>
+        <input type="checkbox" id="autoRestoreOnStartup" />
+      </label>
+      <label class="setting-row">
+        <span>Auto-save snapshot every</span>
+        <select id="autoSaveIntervalMinutes">
+          <option value="5">5 min</option>
+          <option value="10">10 min</option>
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="60">60 min</option>
+        </select>
+      </label>
+      <p class="muted small">Custom domain → category rules live in the extension's Options page (right-click the toolbar icon → Options).</p>
+    </section>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
