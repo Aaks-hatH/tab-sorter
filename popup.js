@@ -255,14 +255,14 @@ async function renderSettings() {
   document.getElementById("autoSortEnabled").checked = settings.autoSortEnabled ?? true;
   document.getElementById("autoRestoreOnStartup").checked = settings.autoRestoreOnStartup ?? false;
   document.getElementById("autoSaveIntervalMinutes").value = String(settings.autoSaveIntervalMinutes ?? 10);
-  for (const id of ["smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
+  for (const id of ["smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
     document.getElementById(id).checked = settings[id] ?? (id !== "autoArchiveDuplicates");
   }
   document.getElementById("minimumSmartGroupSize").value = String(settings.minimumSmartGroupSize ?? 2);
   document.getElementById("staleTabDays").value = String(settings.staleTabDays ?? 14);
 }
 
-for (const id of ["autoSortEnabled", "autoRestoreOnStartup", "smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
+for (const id of ["autoSortEnabled", "autoRestoreOnStartup", "smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
   document.getElementById(id).addEventListener("change", (e) => {
     send({ type: "UPDATE_SETTINGS", settings: { [id]: e.target.checked } });
   });

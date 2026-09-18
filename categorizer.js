@@ -54,6 +54,17 @@ export const BUILTIN_RULES = [
   { category: "Work", color: "blue", domains: [
       "slack.com", "zoom.us", "meet.google.com", "linear.app",
       "atlassian.net", "jira.com", "confluence.com", "salesforce.com"
+  ]},
+  { category: "Classes & Learning", color: "yellow", domains: [
+      "canvaslms.com", "instructure.com", "blackboard.com", "moodle.org",
+      "classroom.google.com", "coursera.org", "edx.org", "udemy.com",
+      "khanacademy.org", "quizlet.com", "chegg.com", "gradescope.com",
+      "pearson.com", "wiley.com", "cengage.com"
+  ]},
+  { category: "Nonprofit & Community", color: "pink", domains: [
+      "idealist.org", "volunteermatch.org", "catchafire.org", "benevity.org",
+      "guidestar.org", "candid.org", "grantstation.com", "grants.gov",
+      "donorbox.org", "givebutter.com", "networkforgood.com", "civicrm.org"
   ]}
 ];
 
@@ -64,7 +75,9 @@ const KEYWORD_RULES = [
   { category: "Video & Streaming", color: "red", words: ["watch", "episode", "trailer", "stream"] },
   { category: "Docs & Productivity", color: "green", words: ["spreadsheet", "invoice", "meeting", "agenda"] },
   { category: "Research & Reference", color: "cyan", words: ["tutorial", "documentation", "how to", "guide", "wiki"] },
-  { category: "Travel", color: "grey", words: ["flight", "hotel", "itinerary", "booking", "reservation"] }
+  { category: "Travel", color: "grey", words: ["flight", "hotel", "itinerary", "booking", "reservation"] },
+  { category: "Classes & Learning", color: "yellow", words: ["syllabus", "assignment", "homework", "lecture", "course", "class", "exam", "quiz", "rubric", "office hours"] },
+  { category: "Nonprofit & Community", color: "pink", words: ["nonprofit", "non-profit", "volunteer", "donation", "fundraiser", "grant proposal", "community outreach"] }
 ];
 
 const STOPWORDS = new Set([
@@ -88,6 +101,38 @@ export function domainLabel(url) {
   // This intentionally avoids a full public-suffix dependency while producing
   // useful labels for common domains and subdomains.
   return parts.length > 2 ? parts.slice(-2, -1)[0] : parts[0];
+}
+
+/**
+ * Extracts common course identifiers (for example CS 101 or BIO-204A) so
+ * related LMS pages, assignments, and readings can form a course workspace.
+ */
+export function courseLabel(tab) {
+  const text = `${tab.title || ""} ${tab.url || ""}`.replace(/[-_/.]/g, " ");
+  const match = text.match(/\b([A-Z]{2,5})\s*-?\s*(\d{2,4}[A-Z]?)\b/i);
+  if (!match) return "";
+  return `${match[1].toUpperCase()} ${match[2].toUpperCase()}`;
+}
+
+export function classroomCourseId(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "classroom.google.com") return "";
+    return parsed.pathname.match(/^\/c\/([^/?#]+)/)?.[1] || "";
+  } catch { return ""; }
+}
+
+/**
+ * Classroom usually puts the course name in the tab title. Keep only a useful
+ * human label and reject generic Google Classroom pages.
+ */
+export function classroomCourseName(tab) {
+  if (!classroomCourseId(tab.url || "")) return "";
+  const title = (tab.title || "")
+    .replace(/\s*[-|–]\s*Google Classroom\s*$/i, "")
+    .replace(/^Google Classroom\s*[-|–]\s*/i, "")
+    .trim();
+  return /^(|classroom|stream|classwork|people)$/i.test(title) ? "" : title.slice(0, 80);
 }
 
 function domainMatch(hostname, rule) {

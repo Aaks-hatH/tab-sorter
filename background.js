@@ -1,4 +1,4 @@
-import { assignCategory, categoryColorPalette, classifyTab, clusterBySharedWords, domainLabel } from "./categorizer.js";
+import { assignCategory, categoryColorPalette, classroomCourseId, classroomCourseName, classifyTab, clusterBySharedWords, courseLabel, domainLabel } from "./categorizer.js";
 
 const DEFAULT_SETTINGS = {
   autoSortEnabled: true,
@@ -13,7 +13,8 @@ const DEFAULT_SETTINGS = {
   autoArchiveDuplicates: false,
   focusDistractionsEnabled: true,
   staleTabDays: 14,
-  autoCollapseFocusGroup: true
+  autoCollapseFocusGroup: true,
+  groupClassworkByCourse: true
 };
 
 // In-memory cache so we still know a tab's url/title/category after it's
@@ -50,6 +51,29 @@ async function getSettings() {
 async function getCustomRules() {
   const stored = await chrome.storage.sync.get("customRules");
   return stored.customRules || [];
+}
+
+async function learnClassroomContexts(tabs) {
+  const stored = await chrome.storage.local.get("classroomContexts");
+  const classroomContexts = stored.classroomContexts || {};
+  let changed = false;
+  for (const tab of tabs) {
+    const id = classroomCourseId(tab.url || "");
+    const name = classroomCourseName(tab);
+    if (id && name && classroomContexts[id] !== name) {
+      classroomContexts[id] = name;
+      changed = true;
+    }
+  }
+  if (changed) await chrome.storage.local.set({ classroomContexts });
+  return classroomContexts;
+}
+
+function matchingClassroomContext(tab, contexts) {
+  const direct = contexts[classroomCourseId(tab.url || "")];
+  if (direct) return direct;
+  const title = (tab.title || "").toLowerCase();
+  return Object.values(contexts).find(name => name.length >= 4 && title.includes(name.toLowerCase())) || "";
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -104,13 +128,22 @@ function scheduleWindowSort(windowId) {
 
 async function smartGroupsFor(tabs, settings) {
   const customRules = await getCustomRules();
+  const classroomContexts = await learnClassroomContexts(tabs);
   const groups = new Map();
   const uncategorized = [];
   for (const tab of tabs) {
     if (manualUngroup.has(tab.id) || !tab.url || tab.url.startsWith("chrome://") ||
       tab.url.startsWith("chrome-extension://") || (settings.ignorePinnedTabs && tab.pinned)) continue;
-    const category = classifyTab(tab, customRules);
+    const classroomContext = settings.groupClassworkByCourse ? matchingClassroomContext(tab, classroomContexts) : "";
+    const category = classifyTab(tab, customRules) || (classroomContext ? { name: "Classes & Learning", color: "yellow" } : null);
     if (category) {
+      const course = classroomContext || (settings.groupClassworkByCourse && category.name === "Classes & Learning" ? courseLabel(tab) : "");
+      if (course) {
+        const key = `course:${course}`;
+        if (!groups.has(key)) groups.set(key, { name: course, color: "yellow", tabs: [] });
+        groups.get(key).tabs.push(tab);
+        continue;
+      }
       const key = `category:${category.name}`;
       if (!groups.has(key)) groups.set(key, { name: category.name, color: category.color, tabs: [] });
       groups.get(key).tabs.push(tab);

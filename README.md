@@ -5,6 +5,7 @@ A Chrome extension that keeps your tabs organized automatically — live, on clo
 ## What it does
 
 - **Zero-effort smart sorting**: new, navigated, and moved tabs are tidied automatically. It recognizes common workspaces (dev, AI, work, finance, research, media, and more), learns your custom domain rules first, then creates useful same-site and shared-topic groups for everything else.
+- **School, coding, and community ready**: Canvas, Blackboard, Moodle, and Google Classroom are recognized alongside volunteering, grant, and nonprofit sites. The sorter remembers visible Google Classroom course names and uses them to group matching Drive files, readings, assignments, and links by class; it also recognizes course codes such as `CS 101` or `BIO-204A`.
 - **Respectful automation**: pinned tabs can be protected, and pulling a tab out of a group is treated as a preference until that tab navigates somewhere new.
 - **One-click Tidy**: the popup's ✦ Tidy control groups the current window and closes inactive, unpinned duplicate URLs. Duplicate auto-closing is opt-in in Settings.
 - **At-a-glance health**: the Live view shows open tabs, recognized tabs, and duplicate count before you decide to act.
@@ -25,7 +26,7 @@ A Chrome extension that keeps your tabs organized automatically — live, on clo
 ## Using it
 
 - Click the toolbar icon to see **Live** (current window's groups and health), **Sessions** (save/restore), **Closed** (recently closed archive), and **Settings**.
-- Keep the defaults for a hands-off experience, or tune same-site grouping, topic discovery, pinned-tab protection, duplicate removal, Focus behavior, stale-tab timing, smart-group size, auto-restore, and snapshot interval in **Settings**.
+- Keep the defaults for a hands-off experience, or tune course grouping, same-site grouping, topic discovery, pinned-tab protection, duplicate removal, Focus behavior, stale-tab timing, smart-group size, auto-restore, and snapshot interval in **Settings**.
 - Right-click the toolbar icon → **Options** to add custom domain rules.
 
 ## Notes
