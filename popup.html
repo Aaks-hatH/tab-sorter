@@ -9,6 +9,7 @@
   <header class="app-header">
     <span class="app-title">Smart Tab Sorter</span>
     <div class="header-actions">
+      <button id="collapseGroupsBtn" class="icon-btn" title="Collapse inactive groups">▰</button>
       <button id="focusBtn" class="icon-btn" title="Move distractions into a collapsed Later group">◐</button>
       <button id="tidyNowBtn" class="primary-btn compact" title="Organize and remove safe duplicate tabs">✦ Tidy</button>
       <button id="sortNowBtn" class="icon-btn" title="Sort current window now">⟲</button>
@@ -58,6 +59,14 @@
         <input type="checkbox" id="smartGroupingEnabled" />
       </label>
       <label class="setting-row">
+        <span>Save closed tabs to the archive</span>
+        <input type="checkbox" id="saveClosedTabs" />
+      </label>
+      <label class="setting-row">
+        <span>Automatically save crash-recovery snapshots</span>
+        <input type="checkbox" id="autoSaveEnabled" />
+      </label>
+      <label class="setting-row">
         <span>Auto-restore last session on browser startup</span>
         <input type="checkbox" id="autoRestoreOnStartup" />
       </label>
@@ -68,6 +77,10 @@
       <label class="setting-row">
         <span>Discover related tabs by page topic</span>
         <input type="checkbox" id="groupRelatedTabs" />
+      </label>
+      <label class="setting-row">
+        <span>Recognize schoolwork in Google Docs, Sheets, and Slides</span>
+        <input type="checkbox" id="schoolworkDetectionEnabled" />
       </label>
       <label class="setting-row">
         <span>Keep each class or course in its own group</span>
@@ -86,8 +99,20 @@
         <input type="checkbox" id="focusDistractionsEnabled" />
       </label>
       <label class="setting-row">
+        <span>Collapse unused groups automatically</span>
+        <input type="checkbox" id="autoCollapseUnusedGroups" />
+      </label>
+      <label class="setting-row">
         <span>Collapse the Focus “Later” group</span>
         <input type="checkbox" id="autoCollapseFocusGroup" />
+      </label>
+      <label class="setting-row">
+        <span>Collapse groups after no activity for</span>
+        <select id="unusedGroupMinutes"><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 hour</option><option value="180">3 hours</option></select>
+      </label>
+      <label class="setting-row">
+        <span>Maximum automatic groups per window</span>
+        <select id="maxAutoGroupsPerWindow"><option value="4">4 groups</option><option value="6">6 groups</option><option value="8">8 groups</option><option value="12">12 groups</option></select>
       </label>
       <label class="setting-row">
         <span>Mark unused tabs as stale after</span>
@@ -107,6 +132,7 @@
           <option value="60">60 min</option>
         </select>
       </label>
+      <p class="muted small">Automatic saving is off by default. Use “Save current” when you want a session. Delete a group with the × button in Live; this keeps its tabs open and ungrouped.</p>
       <p class="muted small">Custom domain → category rules live in the extension's Options page (right-click the toolbar icon → Options).</p>
     </section>
   </main>

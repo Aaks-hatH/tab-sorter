@@ -2,9 +2,14 @@ import { assignCategory, categoryColorPalette, classroomCourseId, classroomCours
 
 const DEFAULT_SETTINGS = {
   autoSortEnabled: true,
+  autoSaveEnabled: false,
+  saveClosedTabs: false,
   autoSaveIntervalMinutes: 10,
   autoRestoreOnStartup: false,
   maxClosedArchive: 500,
+  autoCollapseUnusedGroups: true,
+  unusedGroupMinutes: 30,
+  maxAutoGroupsPerWindow: 8,
   ignorePinnedTabs: true,
   smartGroupingEnabled: true,
   groupSameSiteTabs: true,
@@ -14,7 +19,8 @@ const DEFAULT_SETTINGS = {
   focusDistractionsEnabled: true,
   staleTabDays: 14,
   autoCollapseFocusGroup: true,
-  groupClassworkByCourse: true
+  groupClassworkByCourse: true,
+  schoolworkDetectionEnabled: true
 };
 
 // In-memory cache so we still know a tab's url/title/category after it's
@@ -79,7 +85,8 @@ function matchingClassroomContext(tab, contexts) {
 chrome.runtime.onInstalled.addListener(async () => {
   const settings = await getSettings();
   chrome.storage.sync.set({ settings });
-  chrome.alarms.create("autosave", { periodInMinutes: settings.autoSaveIntervalMinutes });
+  if (settings.autoSaveEnabled) chrome.alarms.create("autosave", { periodInMinutes: settings.autoSaveIntervalMinutes });
+  else await chrome.alarms.clear("autosave");
   await primeCache();
   await sortAllWindows();
 });
@@ -100,22 +107,56 @@ async function primeCache() {
       url: tab.url,
       title: tab.title,
       windowId: tab.windowId,
-      category: null
+      category: null,
+      lastActiveAt: tab.lastAccessed || Date.now()
     });
   }
 }
 
 // ---------- Live sorting ----------
 
-async function findOrCreateGroup(windowId, categoryName, color, tabId) {
+async function findOrCreateGroup(windowId, categoryName, color, tabIds) {
+  const ids = Array.isArray(tabIds) ? tabIds : [tabIds];
   const groups = await chrome.tabGroups.query({ windowId, title: categoryName });
   if (groups.length > 0) {
-    await chrome.tabs.group({ tabIds: [tabId], groupId: groups[0].id });
+    await chrome.tabs.group({ tabIds: ids, groupId: groups[0].id });
     return groups[0].id;
   }
-  const newGroupId = await chrome.tabs.group({ tabIds: [tabId] });
+  const newGroupId = await chrome.tabs.group({ tabIds: ids, createProperties: { windowId } });
   await chrome.tabGroups.update(newGroupId, { title: categoryName, color });
   return newGroupId;
+}
+
+function schoolworkCategory(tab, classroomContext, settings) {
+  if (!settings.schoolworkDetectionEnabled) return null;
+  const url = tab.url || "";
+  const title = (tab.title || "").toLowerCase();
+  const isGoogleDocument = /^(https:\/\/)?(docs|drive|sheets|slides)\.google\.com/i.test(url);
+  const schoolSignals = /\b(assignment|homework|classwork|coursework|syllabus|rubric|lecture|worksheet|reading|quiz|exam|module|lesson|submit|due)\b/i.test(title);
+  // A learned Classroom course title is a high-confidence local connection
+  // between a Google document and the course it was opened for.
+  if (classroomContext && (isGoogleDocument || schoolSignals)) {
+    return { name: classroomContext, color: "yellow", confidence: "high", reason: "learned Classroom course" };
+  }
+  if (/classroom\.google\.com/i.test(url) || (isGoogleDocument && schoolSignals)) {
+    return { name: "Classes & Learning", color: "yellow", confidence: "high", reason: "schoolwork signal" };
+  }
+  return null;
+}
+
+async function collapseUnusedGroups(windowId, settings) {
+  if (!settings.autoCollapseUnusedGroups) return;
+  const cutoff = Date.now() - settings.unusedGroupMinutes * 60 * 1000;
+  const [groups, tabs] = await Promise.all([chrome.tabGroups.query({ windowId }), chrome.tabs.query({ windowId })]);
+  const activeGroupId = tabs.find(tab => tab.active)?.groupId;
+  for (const group of groups) {
+    if (group.id === activeGroupId || group.collapsed) continue;
+    const groupTabs = tabs.filter(tab => tab.groupId === group.id);
+    const lastSeen = Math.max(0, ...groupTabs.map(tab => tabCache.get(tab.id)?.lastActiveAt || 0));
+    if (groupTabs.length && lastSeen && lastSeen < cutoff) {
+      await chrome.tabGroups.update(group.id, { collapsed: true });
+    }
+  }
 }
 
 function scheduleWindowSort(windowId) {
@@ -135,7 +176,7 @@ async function smartGroupsFor(tabs, settings) {
     if (manualUngroup.has(tab.id) || !tab.url || tab.url.startsWith("chrome://") ||
       tab.url.startsWith("chrome-extension://") || (settings.ignorePinnedTabs && tab.pinned)) continue;
     const classroomContext = settings.groupClassworkByCourse ? matchingClassroomContext(tab, classroomContexts) : "";
-    const category = classifyTab(tab, customRules) || (classroomContext ? { name: "Classes & Learning", color: "yellow" } : null);
+    const category = schoolworkCategory(tab, classroomContext, settings) || classifyTab(tab, customRules) || (classroomContext ? { name: "Classes & Learning", color: "yellow" } : null);
     if (category) {
       const course = classroomContext || (settings.groupClassworkByCourse && category.name === "Classes & Learning" ? courseLabel(tab) : "");
       if (course) {
@@ -194,15 +235,19 @@ async function sortWindow(windowId) {
     for (const tab of tabs) await sortSingleTab(tab);
     return;
   }
-  const groups = await smartGroupsFor(tabs, settings);
-  for (const group of groups.values()) {
-    for (const tab of group.tabs) {
-      try {
-        await findOrCreateGroup(windowId, group.name, group.color, tab.id);
-        tabCache.set(tab.id, { url: tab.url, title: tab.title, windowId, category: group.name });
-      } catch { /* Tab was removed or the window changed while sorting. */ }
-    }
+  const candidates = [...(await smartGroupsFor(tabs, settings)).values()]
+    .filter(group => group.tabs.length >= settings.minimumSmartGroupSize)
+    .sort((a, b) => b.tabs.length - a.tabs.length)
+    .slice(0, settings.maxAutoGroupsPerWindow);
+  for (const group of candidates) {
+    try {
+      await findOrCreateGroup(windowId, group.name, group.color, group.tabs.map(tab => tab.id));
+      for (const tab of group.tabs) {
+        tabCache.set(tab.id, { ...tabCache.get(tab.id), url: tab.url, title: tab.title, windowId, category: group.name });
+      }
+    } catch { /* Tabs can move or close while sorting. */ }
   }
+  await collapseUnusedGroups(windowId, settings);
   await archiveDuplicateTabs(windowId);
 }
 
@@ -213,7 +258,7 @@ async function sortAllWindows() {
 
 async function sortSingleTab(tab) {
   const settings = await getSettings();
-  if (!settings.autoSortEnabled) return;
+  if (!settings.autoSortEnabled || settings.smartGroupingEnabled) return;
   if (settings.ignorePinnedTabs && tab.pinned) return;
   if (!tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("chrome-extension://")) return;
   if (manualUngroup.has(tab.id)) return;
@@ -242,7 +287,10 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-  await recordTabActivity(await chrome.tabs.get(tabId));
+  const tab = await chrome.tabs.get(tabId);
+  await recordTabActivity(tab);
+  const cached = tabCache.get(tabId) || {};
+  tabCache.set(tabId, { ...cached, url: tab.url, title: tab.title, windowId: tab.windowId, lastActiveAt: tab.lastAccessed || Date.now() });
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
@@ -272,6 +320,7 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
   if (!cached || !cached.url || cached.url.startsWith("chrome://")) return;
 
   const settings = await getSettings();
+  if (!settings.saveClosedTabs) return;
   const stored = await chrome.storage.local.get("closedArchive");
   const archive = stored.closedArchive || [];
 
@@ -407,14 +456,14 @@ async function maybeRestoreLastSession() {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "autosave") {
-    autoSaveLastSession();
+    getSettings().then(settings => { if (settings.autoSaveEnabled) autoSaveLastSession(); });
   }
 });
 
 // Also snapshot whenever an entire window closes, so "closed while open" is
 // never lost even between alarm intervals.
 chrome.windows.onRemoved.addListener(() => {
-  autoSaveLastSession();
+  getSettings().then(settings => { if (settings.autoSaveEnabled) autoSaveLastSession(); });
 });
 
 // ---------- Messaging with popup / options ----------
@@ -497,11 +546,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: true });
         break;
       }
+      case "COLLAPSE_UNUSED_GROUPS": {
+        const win = await chrome.windows.getCurrent();
+        const settings = await getSettings();
+        await collapseUnusedGroups(win.id, { ...settings, unusedGroupMinutes: 0 });
+        sendResponse({ ok: true });
+        break;
+      }
+      case "DELETE_GROUP": {
+        const tabs = await chrome.tabs.query({ groupId: message.groupId });
+        if (tabs.length) await chrome.tabs.ungroup(tabs.map(tab => tab.id));
+        sendResponse({ ok: true });
+        break;
+      }
       case "UPDATE_SETTINGS": {
         const current = await getSettings();
         const updated = { ...current, ...message.settings };
         await chrome.storage.sync.set({ settings: updated });
-        chrome.alarms.create("autosave", { periodInMinutes: updated.autoSaveIntervalMinutes });
+        if (updated.autoSaveEnabled) chrome.alarms.create("autosave", { periodInMinutes: updated.autoSaveIntervalMinutes });
+        else await chrome.alarms.clear("autosave");
         if (updated.autoSortEnabled) await sortAllWindows();
         sendResponse({ ok: true, settings: updated });
         break;

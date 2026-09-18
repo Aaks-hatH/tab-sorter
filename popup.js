@@ -54,6 +54,8 @@ async function renderLive() {
       const label = group.title || "Untitled group";
       if (!buckets.has(label)) buckets.set(label, { color: group.color, tabs: [] });
       buckets.get(label).tabs.push(tab);
+      buckets.get(label).groupId = group.id;
+      buckets.get(label).collapsed = group.collapsed;
     } else {
       ungrouped.push(tab);
     }
@@ -68,7 +70,7 @@ async function renderLive() {
   }
 
   for (const [label, data] of buckets) {
-    container.appendChild(renderGroupBlock(label, data.color, data.tabs));
+    container.appendChild(renderGroupBlock(label, data.color, data.tabs, data.groupId, data.collapsed));
   }
   if (ungrouped.length) {
     container.appendChild(renderGroupBlock("Ungrouped", "grey", ungrouped));
@@ -86,7 +88,7 @@ async function renderInsights() {
   `;
 }
 
-function renderGroupBlock(label, color, tabs) {
+function renderGroupBlock(label, color, tabs, groupId, collapsed = false) {
   const block = document.createElement("div");
   block.className = "group-block";
 
@@ -96,9 +98,19 @@ function renderGroupBlock(label, color, tabs) {
     <span class="color-dot" style="background:${COLOR_HEX[color] || "#888"}"></span>
     <span>${escapeHtml(label)}</span>
     <span class="group-count">${tabs.length}</span>
+    ${groupId !== undefined ? `<button class="group-delete" title="Remove group (keep tabs open)">×</button>` : ""}
   `;
+  if (groupId !== undefined) {
+    heading.querySelector(".group-delete").addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await send({ type: "DELETE_GROUP", groupId });
+      renderLive();
+      renderInsights();
+    });
+  }
   block.appendChild(heading);
 
+  if (collapsed) return block;
   for (const tab of tabs) {
     const item = document.createElement("div");
     item.className = "tab-item";
@@ -127,6 +139,13 @@ document.getElementById("tidyNowBtn").addEventListener("click", async (event) =>
   setTimeout(() => (event.currentTarget.textContent = "✦ Tidy"), 1800);
   renderLive();
   renderInsights();
+});
+
+document.getElementById("collapseGroupsBtn").addEventListener("click", async (event) => {
+  await send({ type: "COLLAPSE_UNUSED_GROUPS" });
+  event.currentTarget.textContent = "✓";
+  setTimeout(() => (event.currentTarget.textContent = "▰"), 1200);
+  renderLive();
 });
 
 document.getElementById("focusBtn").addEventListener("click", async (event) => {
@@ -254,25 +273,28 @@ async function renderSettings() {
   const settings = stored.settings || {};
   document.getElementById("autoSortEnabled").checked = settings.autoSortEnabled ?? true;
   document.getElementById("autoRestoreOnStartup").checked = settings.autoRestoreOnStartup ?? false;
+  document.getElementById("autoSaveEnabled").checked = settings.autoSaveEnabled ?? false;
+  document.getElementById("saveClosedTabs").checked = settings.saveClosedTabs ?? false;
   document.getElementById("autoSaveIntervalMinutes").value = String(settings.autoSaveIntervalMinutes ?? 10);
-  for (const id of ["smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
+  for (const id of ["smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "schoolworkDetectionEnabled", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup", "autoCollapseUnusedGroups"]) {
     document.getElementById(id).checked = settings[id] ?? (id !== "autoArchiveDuplicates");
   }
   document.getElementById("minimumSmartGroupSize").value = String(settings.minimumSmartGroupSize ?? 2);
   document.getElementById("staleTabDays").value = String(settings.staleTabDays ?? 14);
+  document.getElementById("unusedGroupMinutes").value = String(settings.unusedGroupMinutes ?? 30);
+  document.getElementById("maxAutoGroupsPerWindow").value = String(settings.maxAutoGroupsPerWindow ?? 8);
 }
 
-for (const id of ["autoSortEnabled", "autoRestoreOnStartup", "smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup"]) {
+for (const id of ["autoSortEnabled", "autoRestoreOnStartup", "autoSaveEnabled", "saveClosedTabs", "smartGroupingEnabled", "groupSameSiteTabs", "groupRelatedTabs", "groupClassworkByCourse", "schoolworkDetectionEnabled", "ignorePinnedTabs", "autoArchiveDuplicates", "focusDistractionsEnabled", "autoCollapseFocusGroup", "autoCollapseUnusedGroups"]) {
   document.getElementById(id).addEventListener("change", (e) => {
     send({ type: "UPDATE_SETTINGS", settings: { [id]: e.target.checked } });
   });
 }
-document.getElementById("autoSaveIntervalMinutes").addEventListener("change", (e) => {
-  send({ type: "UPDATE_SETTINGS", settings: { autoSaveIntervalMinutes: Number(e.target.value) } });
-});
-document.getElementById("minimumSmartGroupSize").addEventListener("change", (e) => {
-  send({ type: "UPDATE_SETTINGS", settings: { minimumSmartGroupSize: Number(e.target.value) } });
-});
+for (const id of ["autoSaveIntervalMinutes", "minimumSmartGroupSize", "unusedGroupMinutes", "maxAutoGroupsPerWindow"]) {
+  document.getElementById(id).addEventListener("change", (e) => {
+    send({ type: "UPDATE_SETTINGS", settings: { [id]: Number(e.target.value) } });
+  });
+}
 document.getElementById("staleTabDays").addEventListener("change", (e) => {
   send({ type: "UPDATE_SETTINGS", settings: { staleTabDays: Number(e.target.value) } });
   renderInsights();
