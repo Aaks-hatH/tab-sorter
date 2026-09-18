@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Smart Tab Sorter",
-  "version": "1.0.0",
-  "description": "Live tab auto-sorting into color-coded groups, auto-save on close, session snapshots, and one-click restore.",
-  "permissions": ["tabs", "tabGroups", "storage", "alarms"],
+  "version": "1.1.0",
+  "description": "Adaptive tab grouping with group limits, schoolwork detection, optional retention, and cleanup controls.",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "alarms"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

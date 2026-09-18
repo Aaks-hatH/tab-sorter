@@ -291,3 +291,15 @@ input[type="search"] {
   border-radius: 5px;
   padding: 3px 6px;
 }
+
+.group-delete {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #9296a3;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 16px;
+  padding: 0 3px;
+}
+.group-delete:hover { color: #e2705f; }
